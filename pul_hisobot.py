@@ -241,9 +241,11 @@ HELP_TEXT = (
 # ═══════════════════════════════════════════════════════
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     context.user_data.clear()
-    name = update.effective_user.first_name
+    name = update.effective_user.first_name or "Foydalanuvchi"
+    # Ismdagi maxsus markdown belgilarini tozalash (xatolik bermasligi uchun)
+    safe_name = re.sub(r"([_*\[\]()~`>#+\-=|{}.!])", r"\\\1", name)
     await update.message.reply_text(
-        f"Salom, {name}! 👋\nShaxsiy moliya yordamchingiz v2.0\n\n" + HELP_TEXT,
+        f"Salom, {safe_name}! 👋\nShaxsiy moliya yordamchingiz v2.0\n\n" + HELP_TEXT,
         parse_mode="Markdown", reply_markup=MENU)
 
 async def balance(update, context):
@@ -939,11 +941,30 @@ async def on_cb(update: Update, context: ContextTypes.DEFAULT_TYPE):
 # ═══════════════════════════════════════════════════════
 #  MAIN
 # ═══════════════════════════════════════════════════════
+def start_dummy_server():
+    """Render Web Service uchun portni ochiq saqlash"""
+    from http.server import HTTPServer, BaseHTTPRequestHandler
+    import threading
+    class SimpleHandler(BaseHTTPRequestHandler):
+        def do_GET(self):
+            self.send_response(200)
+            self.end_headers()
+            self.wfile.write(b"Bot is alive!")
+    port = int(os.environ.get("PORT", 8080))
+    server = HTTPServer(("0.0.0.0", port), SimpleHandler)
+    t = threading.Thread(target=server.serve_forever, daemon=True)
+    t.start()
+
 def main():
     if not TOKEN:
         raise SystemExit("BOT_TOKEN o'rnatilmagan!")
+    start_dummy_server()
     init_db()
-    app = Application.builder().token(TOKEN).build()
+    
+    # Ulanish kutish vaqtini (timeout) oshiramiz
+    from telegram.request import HTTPXRequest
+    req = HTTPXRequest(connect_timeout=30.0, read_timeout=30.0)
+    app = Application.builder().token(TOKEN).request(req).build()
 
     # Handlerlar
     app.add_handler(CommandHandler(["start","help"], start))
